@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 namespace MonitorCpu
 {
 
-// Lee % de uso de CPU como el Administrador de tareas.
-// Ruta rápida: PerformanceCounter (barato tras el init).
+// Lee % de uso de CPU como el Administrador de tareas moderno (Win10/11).
+// Ruta rápida: PerformanceCounter (barato tras el init, 1 llamada por segundo).
 // Fallback: GetSystemTimes (1 llamada al kernel, sin WMI pesado cada segundo).
 public sealed class LectorUsoCpu : ILectorUsoCpu
 {
@@ -39,8 +39,11 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
 
     private static PerformanceCounter CrearContador()
     {
+        // Orden: primero el del Admin. moderno, luego el clásico.
+        // Utility tiene en cuenta Turbo/SpeedStep; Time solo mide ocupación.
         string[][] nombresPosibles = new string[][]
         {
+            new string[] { "Processor Information", "% Processor Utility" },
             new string[] { "Processor", "% Processor Time" },
             new string[] { "Procesador", "% de tiempo de procesador" }
         };
@@ -62,6 +65,7 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
     public double LeerPorcentaje()
     {
         // Ruta rápida: contador de Windows (igual que Admin. de tareas).
+        // Solo 1 NextValue() por segundo: coste casi 0.
         if (contador != null)
         {
             try
@@ -71,6 +75,7 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
                 {
                     return 0;
                 }
+                // Utility puede pasar de 100 con Turbo: el Admin. lo capa a 100.
                 if (valor > 100)
                 {
                     return 100;

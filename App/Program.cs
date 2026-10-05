@@ -47,17 +47,19 @@ internal static class Program
         // Se crean a mano (sin contenedor): legible y suficiente para los sensores.
         LectorFrecuenciaCpu lectorCpu = new LectorFrecuenciaCpu();
         LectorUsoCpu lectorUsoCpu = new LectorUsoCpu();
+        LectorGpu lectorGpu = new LectorGpu();
         try
         {
             ILectorBateria lectorBateria = new LectorBateria();
             ILectorRam lectorRam = new LectorRam();
             GestorArranque gestorArranque = new GestorArranque();
-            Application.Run(new VentanaPrincipal(lectorCpu, lectorBateria, lectorUsoCpu, lectorRam, gestorArranque));
+            Application.Run(new VentanaPrincipal(lectorCpu, lectorBateria, lectorUsoCpu, lectorGpu, lectorRam, gestorArranque));
         }
         finally
         {
             lectorCpu.Dispose();
             lectorUsoCpu.Dispose();
+            lectorGpu.Dispose();
             if (mutexInstancia != null)
             {
                 try

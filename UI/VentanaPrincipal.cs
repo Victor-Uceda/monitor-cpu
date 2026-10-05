@@ -12,16 +12,19 @@ public sealed class VentanaPrincipal : Form
     private readonly ILectorFrecuenciaCpu lectorCpu;
     private readonly ILectorBateria lectorBateria;
     private readonly ILectorUsoCpu lectorUsoCpu;
+    private readonly ILectorGpu lectorGpu;
     private readonly ILectorRam lectorRam;
     private readonly GestorArranque gestorArranque;
 
     private readonly Timer temporizador = new Timer();
     private readonly Label etiquetaCpu = new Label();
     private readonly Label etiquetaUsoCpu = new Label();
+    private readonly Label etiquetaGpu = new Label();
     private readonly Label etiquetaRam = new Label();
     private readonly Label etiquetaBateria = new Label();
     private readonly GraficaHistorial grafica = new GraficaHistorial();
     private readonly Button botonCerrar = new Button();
+    private readonly Button botonMinimizar = new Button();
     private readonly NotifyIcon iconoBandeja = new NotifyIcon();
 
     // Para arrastrar la ventana sin bordes.
@@ -34,11 +37,12 @@ public sealed class VentanaPrincipal : Form
     private bool tieneBateriaCacheada;
     private string ultimoTextoBandeja = "";
 
-    public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorRam lectorRam, GestorArranque gestorArranque)
+    public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorGpu lectorGpu, ILectorRam lectorRam, GestorArranque gestorArranque)
     {
         this.lectorCpu = lectorCpu;
         this.lectorBateria = lectorBateria;
         this.lectorUsoCpu = lectorUsoCpu;
+        this.lectorGpu = lectorGpu;
         this.lectorRam = lectorRam;
         this.gestorArranque = gestorArranque;
 
@@ -68,6 +72,16 @@ public sealed class VentanaPrincipal : Form
         botonCerrar.Location = new Point(ConstantesApp.AnchoVentana - 30 - 4, 4);
         botonCerrar.Click += AlCerrar;
         Controls.Add(botonCerrar);
+
+        // Botón _ para minimizar a la bandeja (el widget se oculta).
+        botonMinimizar.Text = "_";
+        botonMinimizar.ForeColor = ConstantesApp.ColorTexto;
+        botonMinimizar.BackColor = ConstantesApp.ColorFondo;
+        botonMinimizar.FlatStyle = FlatStyle.Flat;
+        botonMinimizar.Size = new Size(30, ConstantesApp.AltoBotonCerrar);
+        botonMinimizar.Location = new Point(ConstantesApp.AnchoVentana - 30 - 4 - 30 - 4, 4);
+        botonMinimizar.Click += AlMinimizar;
+        Controls.Add(botonMinimizar);
 
         // Arrastrar desde el fondo.
         MouseDown += AlEmpezarArrastre;
@@ -102,6 +116,18 @@ public sealed class VentanaPrincipal : Form
         etiquetaUsoCpu.MouseUp += AlTerminarArrastre;
         Controls.Add(etiquetaUsoCpu);
         y += ConstantesApp.AltoEtiquetaUso;
+
+        // % de uso de GPU.
+        etiquetaGpu.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
+        etiquetaGpu.ForeColor = ConstantesApp.ColorTextoSuave;
+        etiquetaGpu.BackColor = ConstantesApp.ColorFondo;
+        etiquetaGpu.Location = new Point(ConstantesApp.Margen, y);
+        etiquetaGpu.Size = new Size(ConstantesApp.AnchoVentana - ConstantesApp.Margen * 2, ConstantesApp.AltoEtiquetaGpu);
+        etiquetaGpu.MouseDown += AlEmpezarArrastre;
+        etiquetaGpu.MouseMove += AlArrastrar;
+        etiquetaGpu.MouseUp += AlTerminarArrastre;
+        Controls.Add(etiquetaGpu);
+        y += ConstantesApp.AltoEtiquetaGpu;
 
         // % + GB de RAM.
         etiquetaRam.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
@@ -149,7 +175,11 @@ public sealed class VentanaPrincipal : Form
         ToolStripMenuItem opcionSalir = new ToolStripMenuItem("Salir");
         opcionSalir.Click += AlCerrar;
 
+        ToolStripMenuItem opcionMostrar = new ToolStripMenuItem("Mostrar");
+        opcionMostrar.Click += AlMostrar;
+
         ContextMenuStrip menuBandeja = new ContextMenuStrip();
+        menuBandeja.Items.Add(opcionMostrar);
         menuBandeja.Items.Add(opcionArranque);
         menuBandeja.Items.Add(opcionSalir);
         iconoBandeja.ContextMenuStrip = menuBandeja;
@@ -176,6 +206,7 @@ public sealed class VentanaPrincipal : Form
         {
             double ghz = lectorCpu.LeerGHz();
             double usoCpu = lectorUsoCpu.LeerPorcentaje();
+            double usoGpu = lectorGpu.LeerPorcentaje();
             InfoRam ram = lectorRam.Leer();
 
             // La batería cambia lento: se cachea ~30s en vez de leer cada tick.
@@ -199,6 +230,19 @@ public sealed class VentanaPrincipal : Form
                 etiquetaUsoCpu.ForeColor = usoCpu >= ConstantesApp.UmbralCpuAlto
                     ? ConstantesApp.ColorRojo
                     : ConstantesApp.ColorTextoSuave;
+
+                if (usoGpu < 0)
+                {
+                    PonTexto(etiquetaGpu, "GPU: --");
+                    etiquetaGpu.ForeColor = ConstantesApp.ColorTextoSuave;
+                }
+                else
+                {
+                    PonTexto(etiquetaGpu, string.Format("GPU: {0:F0}%", usoGpu));
+                    etiquetaGpu.ForeColor = usoGpu >= ConstantesApp.UmbralGpuAlto
+                        ? ConstantesApp.ColorRojo
+                        : ConstantesApp.ColorTextoSuave;
+                }
 
                 if (!ram.TieneDatos)
                 {
@@ -239,7 +283,8 @@ public sealed class VentanaPrincipal : Form
                 string textoRam = ram.TieneDatos
                     ? string.Format("RAM {0:F0}%", ram.Porcentaje)
                     : "RAM --";
-                string textoBandeja = string.Format("{0:F2} GHz | CPU {1:F0}% | {2}", ghz, usoCpu, textoRam);
+                string textoGpu = usoGpu < 0 ? "GPU --" : string.Format("GPU {0:F0}%", usoGpu);
+                string textoBandeja = string.Format("{0:F2} GHz | CPU {1:F0}% | {2} | {3}", ghz, usoCpu, textoGpu, textoRam);
                 if (textoBandeja.Length > 63)
                 {
                     textoBandeja = textoBandeja.Substring(0, 63);
@@ -261,6 +306,7 @@ public sealed class VentanaPrincipal : Form
             {
                 PonTexto(etiquetaCpu, "-- GHz");
                 PonTexto(etiquetaUsoCpu, "CPU: --");
+                PonTexto(etiquetaGpu, "GPU: --");
                 PonTexto(etiquetaRam, "RAM: --");
                 PonTexto(etiquetaBateria, "Error de lectura");
             }
@@ -299,6 +345,19 @@ public sealed class VentanaPrincipal : Form
             temporizador.Interval = ConstantesApp.IntervaloMuestreoMs;
             grafica.Invalidate();
         }
+    }
+
+    private void AlMinimizar(object sender, EventArgs e)
+    {
+        // Minimizar = ocultar a la bandeja (doble clic o "Mostrar" para volver).
+        Visible = false;
+    }
+
+    private void AlMostrar(object sender, EventArgs e)
+    {
+        Visible = true;
+        temporizador.Interval = ConstantesApp.IntervaloMuestreoMs;
+        grafica.Invalidate();
     }
 
     private void AlCerrar(object sender, EventArgs e)
