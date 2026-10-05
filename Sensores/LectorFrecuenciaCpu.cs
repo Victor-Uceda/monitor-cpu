@@ -1,30 +1,85 @@
 using System;
 using System.Diagnostics;
 using System.Management;
+using System.Threading;
 
 namespace MonitorCpu
 {
 
 // Lee los GHz como el Administrador de tareas:
 // GHz = (% rendimiento del procesador / 100) * frecuencia base.
+//
+// Arranque rapido (opcion A): el constructor vuelve en ~0ms con el valor
+// por defecto y la WMI + el contador se inicializan en un hilo de fondo.
+// Mientras tanto LeerGHz() devuelve la base (estable y legible).
 public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
 {
-    private readonly PerformanceCounter contador;
-    private readonly double ghzBase;
+    private PerformanceCounter contador;
+    private double ghzBase;
+    private readonly object candado = new object();
     private bool terminado;
 
     public LectorFrecuenciaCpu()
     {
+        // Valor inmediato para pintar la ventana sin esperar a WMI.
+        ghzBase = ConstantesApp.FrecuenciaBasePorDefectoMhz / 1000.0;
+
+        // Trabajo pesado (WMI 0.5-1.5s + PerformanceCounter) en fondo.
+        ThreadPool.QueueUserWorkItem(InicializarEnFondo);
+    }
+
+    private void InicializarEnFondo(object estado)
+    {
+        if (terminado)
+        {
+            return;
+        }
+
         // La frecuencia base se lee una sola vez (no en cada tick).
-        ghzBase = LeerFrecuenciaBaseMhz() / 1000.0;
+        int mhz = LeerFrecuenciaBaseMhz();
 
         // Windows ES y EN usan nombres distintos: se prueban ambos.
-        contador = CrearContador();
+        PerformanceCounter nuevo = CrearContador();
 
         // Este contador necesita 2 muestras; la primera se descarta aquí.
-        if (contador != null)
+        if (nuevo != null)
         {
-            contador.NextValue();
+            try
+            {
+                nuevo.NextValue();
+            }
+            catch
+            {
+                // Contador roto: se descarta y se usa la base.
+                try
+                {
+                    nuevo.Dispose();
+                }
+                catch
+                {
+                }
+                nuevo = null;
+            }
+        }
+
+        lock (candado)
+        {
+            if (terminado)
+            {
+                if (nuevo != null)
+                {
+                    try
+                    {
+                        nuevo.Dispose();
+                    }
+                    catch
+                    {
+                    }
+                }
+                return;
+            }
+            ghzBase = mhz / 1000.0;
+            contador = nuevo;
         }
     }
 
@@ -54,13 +109,29 @@ public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
 
     public double LeerGHz()
     {
-        // Sin contador (VM, permisos, idioma no probado): valor estable legible.
-        if (contador == null)
+        PerformanceCounter actual;
+        double baseActual;
+        lock (candado)
         {
-            return ghzBase;
+            actual = contador;
+            baseActual = ghzBase;
         }
-        double rendimiento = contador.NextValue();
-        return (rendimiento / 100.0) * ghzBase;
+        // Sin contador todavia (init en fondo) o nunca (VM, permisos):
+        // valor estable legible.
+        if (actual == null)
+        {
+            return baseActual;
+        }
+        try
+        {
+            double rendimiento = actual.NextValue();
+            return (rendimiento / 100.0) * baseActual;
+        }
+        catch
+        {
+            // Contador muerto a mitad de sesion: se devuelve la base.
+            return baseActual;
+        }
     }
 
     private static int LeerFrecuenciaBaseMhz()
@@ -89,13 +160,25 @@ public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
 
     public void Dispose()
     {
-        if (!terminado)
+        PerformanceCounter actual = null;
+        lock (candado)
         {
-            if (contador != null)
+            if (!terminado)
             {
-                contador.Dispose();
+                actual = contador;
+                contador = null;
+                terminado = true;
             }
-            terminado = true;
+        }
+        if (actual != null)
+        {
+            try
+            {
+                actual.Dispose();
+            }
+            catch
+            {
+            }
         }
     }
 }

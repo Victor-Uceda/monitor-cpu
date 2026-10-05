@@ -45,6 +45,8 @@ internal static class Program
         }
 
         // Se crean a mano (sin contenedor): legible y suficiente para los sensores.
+        // Opcion A: los constructores son ligeros (~0ms, init pesado en fondo),
+        // asi la ventana pinta al instante sin esperar a WMI ni a GPU Engine.
         LectorFrecuenciaCpu lectorCpu = new LectorFrecuenciaCpu();
         LectorUsoCpu lectorUsoCpu = new LectorUsoCpu();
         LectorGpu lectorGpu = new LectorGpu();

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace MonitorCpu
 {
@@ -8,9 +9,13 @@ namespace MonitorCpu
 // Lee % de uso de CPU como el Administrador de tareas moderno (Win10/11).
 // Ruta rápida: PerformanceCounter (barato tras el init, 1 llamada por segundo).
 // Fallback: GetSystemTimes (1 llamada al kernel, sin WMI pesado cada segundo).
+//
+// Arranque rapido (opcion A): el constructor vuelve en ~0ms y el contador
+// se crea en un hilo de fondo. Mientras tanto se usa el fallback barato.
 public sealed class LectorUsoCpu : ILectorUsoCpu
 {
-    private readonly PerformanceCounter contador;
+    private PerformanceCounter contador;
+    private readonly object candado = new object();
     private bool terminado;
 
     // Estado para el fallback GetSystemTimes (deltas entre ticks).
@@ -21,19 +26,56 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
 
     public LectorUsoCpu()
     {
-        contador = CrearContador();
+        // Contador pesado en fondo para no bloquear el primer pintado.
+        ThreadPool.QueueUserWorkItem(InicializarEnFondo);
+    }
+
+    private void InicializarEnFondo(object estado)
+    {
+        if (terminado)
+        {
+            return;
+        }
+        PerformanceCounter nuevo = CrearContador();
 
         // Este contador necesita 2 muestras; la primera se descarta aquí.
-        if (contador != null)
+        if (nuevo != null)
         {
             try
             {
-                contador.NextValue();
+                nuevo.NextValue();
             }
             catch
             {
                 // Si la primera lectura falla, el tick usará el fallback.
+                try
+                {
+                    nuevo.Dispose();
+                }
+                catch
+                {
+                }
+                nuevo = null;
             }
+        }
+
+        lock (candado)
+        {
+            if (terminado)
+            {
+                if (nuevo != null)
+                {
+                    try
+                    {
+                        nuevo.Dispose();
+                    }
+                    catch
+                    {
+                    }
+                }
+                return;
+            }
+            contador = nuevo;
         }
     }
 
@@ -64,13 +106,19 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
 
     public double LeerPorcentaje()
     {
+        PerformanceCounter actual;
+        lock (candado)
+        {
+            actual = contador;
+        }
         // Ruta rápida: contador de Windows (igual que Admin. de tareas).
         // Solo 1 NextValue() por segundo: coste casi 0.
-        if (contador != null)
+        // Si aun no termino el init en fondo, se usa el fallback.
+        if (actual != null)
         {
             try
             {
-                double valor = contador.NextValue();
+                double valor = actual.NextValue();
                 if (valor < 0)
                 {
                     return 0;
@@ -165,13 +213,25 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
 
     public void Dispose()
     {
-        if (!terminado)
+        PerformanceCounter actual = null;
+        lock (candado)
         {
-            if (contador != null)
+            if (!terminado)
             {
-                contador.Dispose();
+                actual = contador;
+                contador = null;
+                terminado = true;
             }
-            terminado = true;
+        }
+        if (actual != null)
+        {
+            try
+            {
+                actual.Dispose();
+            }
+            catch
+            {
+            }
         }
     }
 }
