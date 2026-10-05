@@ -12,14 +12,12 @@ public sealed class VentanaPrincipal : Form
     private readonly ILectorFrecuenciaCpu lectorCpu;
     private readonly ILectorBateria lectorBateria;
     private readonly ILectorUsoCpu lectorUsoCpu;
-    private readonly ILectorGpu lectorGpu;
     private readonly ILectorRam lectorRam;
     private readonly GestorArranque gestorArranque;
 
     private readonly Timer temporizador = new Timer();
     private readonly Label etiquetaCpu = new Label();
     private readonly Label etiquetaUsoCpu = new Label();
-    private readonly Label etiquetaGpu = new Label();
     private readonly Label etiquetaRam = new Label();
     private readonly Label etiquetaBateria = new Label();
     private readonly GraficaHistorial grafica = new GraficaHistorial();
@@ -35,16 +33,13 @@ public sealed class VentanaPrincipal : Form
     private int contadorTicks;
     private InfoBateria bateriaCacheada;
     private bool tieneBateriaCacheada;
-    private double ultimoUsoGpu = -1;
-    private bool tieneUltimoUsoGpu;
     private string ultimoTextoBandeja = "";
 
-    public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorGpu lectorGpu, ILectorRam lectorRam, GestorArranque gestorArranque)
+    public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorRam lectorRam, GestorArranque gestorArranque)
     {
         this.lectorCpu = lectorCpu;
         this.lectorBateria = lectorBateria;
         this.lectorUsoCpu = lectorUsoCpu;
-        this.lectorGpu = lectorGpu;
         this.lectorRam = lectorRam;
         this.gestorArranque = gestorArranque;
 
@@ -118,18 +113,6 @@ public sealed class VentanaPrincipal : Form
         etiquetaUsoCpu.MouseUp += AlTerminarArrastre;
         Controls.Add(etiquetaUsoCpu);
         y += ConstantesApp.AltoEtiquetaUso;
-
-        // % de uso de GPU.
-        etiquetaGpu.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
-        etiquetaGpu.ForeColor = ConstantesApp.ColorTextoSuave;
-        etiquetaGpu.BackColor = ConstantesApp.ColorFondo;
-        etiquetaGpu.Location = new Point(ConstantesApp.Margen, y);
-        etiquetaGpu.Size = new Size(ConstantesApp.AnchoVentana - ConstantesApp.Margen * 2, ConstantesApp.AltoEtiquetaGpu);
-        etiquetaGpu.MouseDown += AlEmpezarArrastre;
-        etiquetaGpu.MouseMove += AlArrastrar;
-        etiquetaGpu.MouseUp += AlTerminarArrastre;
-        Controls.Add(etiquetaGpu);
-        y += ConstantesApp.AltoEtiquetaGpu;
 
         // % + GB de RAM.
         etiquetaRam.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
@@ -208,20 +191,6 @@ public sealed class VentanaPrincipal : Form
             contadorTicks++;
             double ghz = lectorCpu.LeerGHz();
             double usoCpu = lectorUsoCpu.LeerPorcentaje();
-            // GPU: barrer 100-250 contadores cuesta ~300ms de CPU.
-            // Se lee 1 de cada 3 ticks (~3s) y se reutiliza el ultimo
-            // valor. El LectorGpu ademas cachea internamente por si acaso.
-            double usoGpu;
-            if (!tieneUltimoUsoGpu || (contadorTicks % 3) == 1)
-            {
-                usoGpu = lectorGpu.LeerPorcentaje();
-                ultimoUsoGpu = usoGpu;
-                tieneUltimoUsoGpu = true;
-            }
-            else
-            {
-                usoGpu = ultimoUsoGpu;
-            }
             InfoRam ram = lectorRam.Leer();
 
             // La batería cambia lento: se cachea ~30s en vez de leer cada tick.
@@ -244,19 +213,6 @@ public sealed class VentanaPrincipal : Form
                 etiquetaUsoCpu.ForeColor = usoCpu >= ConstantesApp.UmbralCpuAlto
                     ? ConstantesApp.ColorRojo
                     : ConstantesApp.ColorTextoSuave;
-
-                if (usoGpu < 0)
-                {
-                    PonTexto(etiquetaGpu, "GPU: --");
-                    etiquetaGpu.ForeColor = ConstantesApp.ColorTextoSuave;
-                }
-                else
-                {
-                    PonTexto(etiquetaGpu, string.Format("GPU: {0:F0}%", usoGpu));
-                    etiquetaGpu.ForeColor = usoGpu >= ConstantesApp.UmbralGpuAlto
-                        ? ConstantesApp.ColorRojo
-                        : ConstantesApp.ColorTextoSuave;
-                }
 
                 if (!ram.TieneDatos)
                 {
@@ -301,8 +257,7 @@ public sealed class VentanaPrincipal : Form
                 string textoRam = ram.TieneDatos
                     ? string.Format("RAM {0:F0}%", ram.Porcentaje)
                     : "RAM --";
-                string textoGpu = usoGpu < 0 ? "GPU --" : string.Format("GPU {0:F0}%", usoGpu);
-                string textoBandeja = string.Format("{0:F1} GHz | CPU {1:F0}% | {2} | {3}", ghz, usoCpu, textoGpu, textoRam);
+                string textoBandeja = string.Format("{0:F1} GHz | CPU {1:F0}% | {2}", ghz, usoCpu, textoRam);
                 if (textoBandeja.Length > 63)
                 {
                     textoBandeja = textoBandeja.Substring(0, 63);
@@ -325,7 +280,6 @@ public sealed class VentanaPrincipal : Form
             {
                 PonTexto(etiquetaCpu, "-- GHz");
                 PonTexto(etiquetaUsoCpu, "CPU: --");
-                PonTexto(etiquetaGpu, "GPU: --");
                 PonTexto(etiquetaRam, "RAM: --");
                 PonTexto(etiquetaBateria, "Error de lectura");
             }

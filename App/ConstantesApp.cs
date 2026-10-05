@@ -10,7 +10,8 @@ public static class ConstantesApp
     public const string NombreApp = "MonitorCpu";
 
     // Mutex para instancia única: si ya está abierto, el segundo .exe no abre ventana.
-    public const string NombreMutex = @"Local\MonitorCpu_UnicaInstancia";
+    // Base sin prefijo: Program prueba Global\ y luego Local\.
+    public const string NombreMutex = "MonitorCpu_UnicaInstancia";
 
     // Muestreo: 1 vez por segundo (suficiente y casi 0% CPU).
     public const int IntervaloMuestreoMs = 1000;
@@ -27,12 +28,11 @@ public static class ConstantesApp
 
     // Tamaño del widget para el segundo monitor.
     public const int AnchoVentana = 320;
-    public const int AltoVentana = 282;
+    public const int AltoVentana = 260;
     public const int Margen = 12;
     public const int AltoBotonCerrar = 26;
     public const int AltoEtiquetaCpu = 50;
     public const int AltoEtiquetaUso = 22;
-    public const int AltoEtiquetaGpu = 22;
     public const int AltoEtiquetaRam = 22;
     public const int AltoEtiquetaBateria = 24;
     public const int AltoGrafica = 80;
@@ -45,10 +45,9 @@ public static class ConstantesApp
     // A partir de aquí la batería se muestra en rojo.
     public const int UmbralBateriaBaja = 20;
 
-    // A partir de aquí CPU/RAM/GPU se muestran en rojo (carga alta).
+    // A partir de aquí CPU/RAM se muestran en rojo (carga alta).
     public const int UmbralCpuAlto = 80;
     public const int UmbralRamAlta = 90;
-    public const int UmbralGpuAlto = 80;
 
     public const string TextoCargando = "Cargando";
     public const string TextoBateria = "Bateria";
