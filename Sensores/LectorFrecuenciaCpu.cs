@@ -84,20 +84,21 @@ public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
     }
 
     // Prueba catálogo ES primero, luego EN. Si ninguno existe, devuelve null.
+    // La entrada EN reutiliza las constantes (la ES es otro idioma literal).
     private static PerformanceCounter CrearContador()
     {
         string[][] nombresPosibles = new string[][]
         {
             // "Información" sin ó literal: evita problemas de encoding del compilador.
             new string[] { "Informaci\u00F3n del procesador", "% de rendimiento del procesador" },
-            new string[] { "Processor Information", "% Processor Performance" }
+            new string[] { ConstantesApp.CategoriaContador, ConstantesApp.NombreContador }
         };
 
         foreach (string[] nombres in nombresPosibles)
         {
             try
             {
-                return new PerformanceCounter(nombres[0], nombres[1], "_Total", true);
+                return new PerformanceCounter(nombres[0], nombres[1], ConstantesApp.InstanciaContador, true);
             }
             catch
             {
@@ -125,7 +126,7 @@ public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
         try
         {
             double rendimiento = actual.NextValue();
-            return (rendimiento / 100.0) * baseActual;
+            return (rendimiento / ConstantesApp.PorcentajeMaximo) * baseActual;
         }
         catch
         {
@@ -139,7 +140,7 @@ public sealed class LectorFrecuenciaCpu : ILectorFrecuenciaCpu
         try
         {
             // MaxClockSpeed viene en MHz y casi nunca cambia.
-            using (ManagementObjectSearcher busqueda = new ManagementObjectSearcher("SELECT MaxClockSpeed FROM Win32_Processor"))
+            using (ManagementObjectSearcher busqueda = new ManagementObjectSearcher(ConstantesApp.ConsultaWmiFrecuenciaBase))
             {
                 foreach (ManagementObject cpu in busqueda.Get())
                 {

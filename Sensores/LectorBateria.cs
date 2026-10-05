@@ -1,3 +1,4 @@
+using System;
 using System.Windows.Forms;
 
 namespace MonitorCpu
@@ -11,12 +12,13 @@ public sealed class LectorBateria : ILectorBateria
     {
         PowerStatus estado = SystemInformation.PowerStatus;
 
-        // PowerStatus da 0.0 a 1.0 (desconocido = -1). Se pasa a 0-100.
-        int porcentaje = (int)(estado.BatteryLifePercent * 100.0f);
+        // PowerStatus da 0.0 a 1.0 (desconocido = -1). Se pasa a 0-100
+        // redondeando (antes truncaba: 99,6% se mostraba como 99%).
+        int porcentaje = (int)Math.Round(estado.BatteryLifePercent * ConstantesApp.PorcentajeMaximo);
 
         // NoSystemBattery = PC de escritorio.
         bool tieneBateria = estado.BatteryLifePercent >= 0
-            && porcentaje <= 100
+            && porcentaje <= ConstantesApp.PorcentajeMaximo
             && estado.BatteryChargeStatus != BatteryChargeStatus.NoSystemBattery;
 
         if (!tieneBateria)

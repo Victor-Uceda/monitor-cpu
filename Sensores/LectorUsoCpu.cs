@@ -94,7 +94,7 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
         {
             try
             {
-                return new PerformanceCounter(nombres[0], nombres[1], "_Total", true);
+                return new PerformanceCounter(nombres[0], nombres[1], ConstantesApp.InstanciaContador, true);
             }
             catch
             {
@@ -119,14 +119,14 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
             try
             {
                 double valor = actual.NextValue();
-                if (valor < 0)
+                if (valor < ConstantesApp.PorcentajeMinimo)
                 {
-                    return 0;
+                    return ConstantesApp.PorcentajeMinimo;
                 }
                 // Utility puede pasar de 100 con Turbo: el Admin. lo capa a 100.
-                if (valor > 100)
+                if (valor > ConstantesApp.PorcentajeMaximo)
                 {
-                    return 100;
+                    return ConstantesApp.PorcentajeMaximo;
                 }
                 return valor;
             }
@@ -194,14 +194,14 @@ public sealed class LectorUsoCpu : ILectorUsoCpu
             }
 
             // kernel incluye tiempo ocioso: lo útil = total - ocioso.
-            double uso = (double)(total - difOcioso) * 100.0 / (double)total;
-            if (uso < 0)
+            double uso = (double)(total - difOcioso) * ConstantesApp.PorcentajeMaximo / (double)total;
+            if (uso < ConstantesApp.PorcentajeMinimo)
             {
-                return 0;
+                return ConstantesApp.PorcentajeMinimo;
             }
-            if (uso > 100)
+            if (uso > ConstantesApp.PorcentajeMaximo)
             {
-                return 100;
+                return ConstantesApp.PorcentajeMaximo;
             }
             return uso;
         }

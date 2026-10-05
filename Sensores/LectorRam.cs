@@ -35,8 +35,8 @@ public sealed class LectorRam : ILectorRam
             if (GlobalMemoryStatusEx(ref estado) && estado.TotalFisica > 0)
             {
                 ulong usada = estado.TotalFisica - estado.LibreFisica;
-                double usadaGB = usada / 1024.0 / 1024.0 / 1024.0;
-                double totalGB = estado.TotalFisica / 1024.0 / 1024.0 / 1024.0;
+                double usadaGB = usada / ConstantesApp.BytesPorGB;
+                double totalGB = estado.TotalFisica / ConstantesApp.BytesPorGB;
                 // Carga ya es el % (0-100) calculado por Windows: se usa directo.
                 return new InfoRam(estado.Carga, usadaGB, totalGB);
             }

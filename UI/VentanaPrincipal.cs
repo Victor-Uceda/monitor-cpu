@@ -24,6 +24,12 @@ public sealed class VentanaPrincipal : Form
     private readonly Button botonCerrar = new Button();
     private readonly Button botonMinimizar = new Button();
     private readonly NotifyIcon iconoBandeja = new NotifyIcon();
+    private readonly ContextMenuStrip menuBandeja = new ContextMenuStrip();
+
+    // Fuentes propias: se liberan en Dispose (handles GDI).
+    private readonly Font fuenteCpu = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteCpu, FontStyle.Bold);
+    private readonly Font fuenteUso = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
+    private readonly Font fuenteBateria = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteBateria);
 
     // Para arrastrar la ventana sin bordes.
     private bool arrastrando;
@@ -34,6 +40,20 @@ public sealed class VentanaPrincipal : Form
     private InfoBateria bateriaCacheada;
     private bool tieneBateriaCacheada;
     private string ultimoTextoBandeja = "";
+
+    // Caché de lo ya mostrado: si el valor no cambió, ni se formatea
+    // (string.Format cada segundo era basura en el caso estable común).
+    private double ultimoGhz = double.NaN;
+    private double ultimoUsoCpu = double.NaN;
+    private bool tieneUltimaRam;
+    private bool ultimaRamTiene;
+    private double ultimaRamPct = double.NaN;
+    private double ultimaRamUsada = double.NaN;
+    private double ultimaRamTotal = double.NaN;
+    private bool tieneUltimaBateria;
+    private int ultimaBatPct;
+    private bool ultimaBatCargando;
+    private bool ultimaBatTiene;
 
     public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorRam lectorRam, GestorArranque gestorArranque)
     {
@@ -65,8 +85,8 @@ public sealed class VentanaPrincipal : Form
         botonCerrar.ForeColor = ConstantesApp.ColorTexto;
         botonCerrar.BackColor = ConstantesApp.ColorFondo;
         botonCerrar.FlatStyle = FlatStyle.Flat;
-        botonCerrar.Size = new Size(30, ConstantesApp.AltoBotonCerrar);
-        botonCerrar.Location = new Point(ConstantesApp.AnchoVentana - 30 - 4, 4);
+        botonCerrar.Size = new Size(ConstantesApp.AnchoBotonVentana, ConstantesApp.AltoBotonCerrar);
+        botonCerrar.Location = new Point(ConstantesApp.AnchoVentana - ConstantesApp.AnchoBotonVentana - ConstantesApp.MargenBotonVentana, ConstantesApp.MargenBotonVentana);
         botonCerrar.Click += AlCerrar;
         Controls.Add(botonCerrar);
 
@@ -75,8 +95,8 @@ public sealed class VentanaPrincipal : Form
         botonMinimizar.ForeColor = ConstantesApp.ColorTexto;
         botonMinimizar.BackColor = ConstantesApp.ColorFondo;
         botonMinimizar.FlatStyle = FlatStyle.Flat;
-        botonMinimizar.Size = new Size(30, ConstantesApp.AltoBotonCerrar);
-        botonMinimizar.Location = new Point(ConstantesApp.AnchoVentana - 30 - 4 - 30 - 4, 4);
+        botonMinimizar.Size = new Size(ConstantesApp.AnchoBotonVentana, ConstantesApp.AltoBotonCerrar);
+        botonMinimizar.Location = new Point(ConstantesApp.AnchoVentana - ConstantesApp.AnchoBotonVentana - ConstantesApp.MargenBotonVentana - ConstantesApp.AnchoBotonVentana - ConstantesApp.MargenBotonVentana, ConstantesApp.MargenBotonVentana);
         botonMinimizar.Click += AlMinimizar;
         Controls.Add(botonMinimizar);
 
@@ -88,10 +108,10 @@ public sealed class VentanaPrincipal : Form
 
     private void CrearEtiquetas()
     {
-        int y = ConstantesApp.AltoBotonCerrar + 4;
+        int y = ConstantesApp.AltoBotonCerrar + ConstantesApp.EspaciadoBloques;
 
         // Número grande de GHz.
-        etiquetaCpu.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteCpu, FontStyle.Bold);
+        etiquetaCpu.Font = fuenteCpu;
         etiquetaCpu.ForeColor = ConstantesApp.ColorTexto;
         etiquetaCpu.BackColor = ConstantesApp.ColorFondo;
         etiquetaCpu.Location = new Point(ConstantesApp.Margen, y);
@@ -103,7 +123,7 @@ public sealed class VentanaPrincipal : Form
         y += ConstantesApp.AltoEtiquetaCpu;
 
         // % de uso de CPU.
-        etiquetaUsoCpu.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
+        etiquetaUsoCpu.Font = fuenteUso;
         etiquetaUsoCpu.ForeColor = ConstantesApp.ColorTextoSuave;
         etiquetaUsoCpu.BackColor = ConstantesApp.ColorFondo;
         etiquetaUsoCpu.Location = new Point(ConstantesApp.Margen, y);
@@ -115,7 +135,7 @@ public sealed class VentanaPrincipal : Form
         y += ConstantesApp.AltoEtiquetaUso;
 
         // % + GB de RAM.
-        etiquetaRam.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteUso);
+        etiquetaRam.Font = fuenteUso;
         etiquetaRam.ForeColor = ConstantesApp.ColorTextoSuave;
         etiquetaRam.BackColor = ConstantesApp.ColorFondo;
         etiquetaRam.Location = new Point(ConstantesApp.Margen, y);
@@ -127,7 +147,7 @@ public sealed class VentanaPrincipal : Form
         y += ConstantesApp.AltoEtiquetaRam;
 
         // Porcentaje + estado de batería.
-        etiquetaBateria.Font = new Font(FontFamily.GenericSansSerif, ConstantesApp.TamanoFuenteBateria);
+        etiquetaBateria.Font = fuenteBateria;
         etiquetaBateria.ForeColor = ConstantesApp.ColorTextoSuave;
         etiquetaBateria.BackColor = ConstantesApp.ColorFondo;
         etiquetaBateria.Location = new Point(ConstantesApp.Margen, y);
@@ -136,7 +156,7 @@ public sealed class VentanaPrincipal : Form
         etiquetaBateria.MouseMove += AlArrastrar;
         etiquetaBateria.MouseUp += AlTerminarArrastre;
         Controls.Add(etiquetaBateria);
-        y += ConstantesApp.AltoEtiquetaBateria + 4;
+        y += ConstantesApp.AltoEtiquetaBateria + ConstantesApp.EspaciadoBloques;
 
         // Gráfica de últimos 60 segundos.
         grafica.Location = new Point(ConstantesApp.Margen, y);
@@ -162,7 +182,6 @@ public sealed class VentanaPrincipal : Form
         ToolStripMenuItem opcionMostrar = new ToolStripMenuItem("Mostrar");
         opcionMostrar.Click += AlMostrar;
 
-        ContextMenuStrip menuBandeja = new ContextMenuStrip();
         menuBandeja.Items.Add(opcionMostrar);
         menuBandeja.Items.Add(opcionArranque);
         menuBandeja.Items.Add(opcionSalir);
@@ -207,42 +226,68 @@ public sealed class VentanaPrincipal : Form
 
             if (!oculta)
             {
-                PonTexto(etiquetaCpu, string.Format("{0:F2} GHz", ghz));
-
-                PonTexto(etiquetaUsoCpu, string.Format("CPU: {0:F0}%", usoCpu));
-                etiquetaUsoCpu.ForeColor = usoCpu >= ConstantesApp.UmbralCpuAlto
-                    ? ConstantesApp.ColorRojo
-                    : ConstantesApp.ColorTextoSuave;
-
-                if (!ram.TieneDatos)
+                // Cada bloque solo formatea si el valor cambió desde el
+                // último tick: en estado estable no hay string.Format ni
+                // redibujado (PonTexto además lo protege).
+                if (ghz != ultimoGhz)
                 {
-                    PonTexto(etiquetaRam, "RAM: --");
-                    etiquetaRam.ForeColor = ConstantesApp.ColorTextoSuave;
+                    PonTexto(etiquetaCpu, string.Format("{0:F2} GHz", ghz));
+                    ultimoGhz = ghz;
                 }
-                else
+
+                if (usoCpu != ultimoUsoCpu)
                 {
-                    PonTexto(etiquetaRam, string.Format("RAM: {0:F0}% - {1:F1} / {2:F1} GB", ram.Porcentaje, ram.UsadaGB, ram.TotalGB));
-                    etiquetaRam.ForeColor = ram.Porcentaje >= ConstantesApp.UmbralRamAlta
+                    PonTexto(etiquetaUsoCpu, string.Format("CPU: {0:F0}%", usoCpu));
+                    etiquetaUsoCpu.ForeColor = usoCpu >= ConstantesApp.UmbralCpuAlto
                         ? ConstantesApp.ColorRojo
                         : ConstantesApp.ColorTextoSuave;
+                    ultimoUsoCpu = usoCpu;
                 }
 
-                if (!bateria.TieneBateria)
+                if (!tieneUltimaRam || ram.TieneDatos != ultimaRamTiene || ram.Porcentaje != ultimaRamPct || ram.UsadaGB != ultimaRamUsada || ram.TotalGB != ultimaRamTotal)
                 {
-                    PonTexto(etiquetaBateria, ConstantesApp.TextoSinBateria);
-                    etiquetaBateria.ForeColor = ConstantesApp.ColorTextoSuave;
+                    if (!ram.TieneDatos)
+                    {
+                        PonTexto(etiquetaRam, "RAM: --");
+                        etiquetaRam.ForeColor = ConstantesApp.ColorTextoSuave;
+                    }
+                    else
+                    {
+                        PonTexto(etiquetaRam, string.Format("RAM: {0:F0}% - {1:F1} / {2:F1} GB", ram.Porcentaje, ram.UsadaGB, ram.TotalGB));
+                        etiquetaRam.ForeColor = ram.Porcentaje >= ConstantesApp.UmbralRamAlta
+                            ? ConstantesApp.ColorRojo
+                            : ConstantesApp.ColorTextoSuave;
+                    }
+                    tieneUltimaRam = true;
+                    ultimaRamTiene = ram.TieneDatos;
+                    ultimaRamPct = ram.Porcentaje;
+                    ultimaRamUsada = ram.UsadaGB;
+                    ultimaRamTotal = ram.TotalGB;
                 }
-                else if (bateria.EstaCargando)
+
+                if (!tieneUltimaBateria || bateria.Porcentaje != ultimaBatPct || bateria.EstaCargando != ultimaBatCargando || bateria.TieneBateria != ultimaBatTiene)
                 {
-                    PonTexto(etiquetaBateria, string.Format("{0}% - {1}", bateria.Porcentaje, ConstantesApp.TextoCargando));
-                    etiquetaBateria.ForeColor = ConstantesApp.ColorVerde;
-                }
-                else
-                {
-                    PonTexto(etiquetaBateria, string.Format("{0}% - {1}", bateria.Porcentaje, ConstantesApp.TextoBateria));
-                    etiquetaBateria.ForeColor = bateria.Porcentaje <= ConstantesApp.UmbralBateriaBaja
-                        ? ConstantesApp.ColorRojo
-                        : ConstantesApp.ColorTextoSuave;
+                    if (!bateria.TieneBateria)
+                    {
+                        PonTexto(etiquetaBateria, ConstantesApp.TextoSinBateria);
+                        etiquetaBateria.ForeColor = ConstantesApp.ColorTextoSuave;
+                    }
+                    else if (bateria.EstaCargando)
+                    {
+                        PonTexto(etiquetaBateria, string.Format("{0}% - {1}", bateria.Porcentaje, ConstantesApp.TextoCargando));
+                        etiquetaBateria.ForeColor = ConstantesApp.ColorVerde;
+                    }
+                    else
+                    {
+                        PonTexto(etiquetaBateria, string.Format("{0}% - {1}", bateria.Porcentaje, ConstantesApp.TextoBateria));
+                        etiquetaBateria.ForeColor = bateria.Porcentaje <= ConstantesApp.UmbralBateriaBaja
+                            ? ConstantesApp.ColorRojo
+                            : ConstantesApp.ColorTextoSuave;
+                    }
+                    tieneUltimaBateria = true;
+                    ultimaBatPct = bateria.Porcentaje;
+                    ultimaBatCargando = bateria.EstaCargando;
+                    ultimaBatTiene = bateria.TieneBateria;
                 }
             }
 
@@ -250,7 +295,7 @@ public sealed class VentanaPrincipal : Form
             // Solo se toca 1 de cada 3 ticks (~3s) y solo si cambió: cada
             // asignación es una llamada al shell. Con F1 en vez de F2 cambia
             // menos (antes cambiaba casi cada segundo por los decimales).
-            if ((contadorTicks % 3) == 1)
+            if ((contadorTicks % ConstantesApp.CadaCuantosTicksTooltip) == 1)
             {
             try
             {
@@ -258,9 +303,9 @@ public sealed class VentanaPrincipal : Form
                     ? string.Format("RAM {0:F0}%", ram.Porcentaje)
                     : "RAM --";
                 string textoBandeja = string.Format("{0:F1} GHz | CPU {1:F0}% | {2}", ghz, usoCpu, textoRam);
-                if (textoBandeja.Length > 63)
+                if (textoBandeja.Length > ConstantesApp.LongitudMaximaTooltip)
                 {
-                    textoBandeja = textoBandeja.Substring(0, 63);
+                    textoBandeja = textoBandeja.Substring(0, ConstantesApp.LongitudMaximaTooltip);
                 }
                 if (textoBandeja != ultimoTextoBandeja)
                 {
@@ -314,9 +359,7 @@ public sealed class VentanaPrincipal : Form
         Visible = !Visible;
         if (Visible)
         {
-            // Al volver: ritmo rápido de inmediato y repintado completo.
-            temporizador.Interval = ConstantesApp.IntervaloMuestreoMs;
-            grafica.Invalidate();
+            Mostrar();
         }
     }
 
@@ -328,6 +371,12 @@ public sealed class VentanaPrincipal : Form
 
     private void AlMostrar(object sender, EventArgs e)
     {
+        Mostrar();
+    }
+
+    private void Mostrar()
+    {
+        // Al volver: ritmo rápido de inmediato y repintado completo.
         Visible = true;
         temporizador.Interval = ConstantesApp.IntervaloMuestreoMs;
         grafica.Invalidate();
@@ -370,6 +419,10 @@ public sealed class VentanaPrincipal : Form
         {
             temporizador.Dispose();
             iconoBandeja.Dispose();
+            menuBandeja.Dispose();
+            fuenteCpu.Dispose();
+            fuenteUso.Dispose();
+            fuenteBateria.Dispose();
         }
         base.Dispose(disposing);
     }

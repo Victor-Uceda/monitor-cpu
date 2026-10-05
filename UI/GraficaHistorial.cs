@@ -12,11 +12,11 @@ public sealed class GraficaHistorial : Control
     // Cola fija: al llegar al tope se saca el más viejo.
     private readonly Queue<double> historial = new Queue<double>();
 
-    // Arreglos reutilizados para no crear basura en cada dibujado.
-    private readonly PointF[] puntosReutilizados = new PointF[ConstantesApp.CapacidadHistorial];
+    // Arreglo reutilizado para dibujar sin crear basura en cada frame.
+    // Solo se redimensiona mientras crece (primeros 60s), luego nunca más.
     private PointF[] puntosParaDibujar = new PointF[0];
 
-    private readonly Pen lapizLinea = new Pen(ConstantesApp.ColorLineaGrafica, 2);
+    private readonly Pen lapizLinea = new Pen(ConstantesApp.ColorLineaGrafica, ConstantesApp.GrosorLineaGrafica);
 
     public GraficaHistorial()
     {
@@ -62,14 +62,14 @@ public sealed class GraficaHistorial : Control
             if (valor < minimo) minimo = valor;
         }
         double rango = maximo - minimo;
-        if (rango < 0.05)
+        if (rango < ConstantesApp.RangoMinimoGrafica)
         {
-            maximo += 0.025;
-            minimo -= 0.025;
+            maximo += ConstantesApp.RangoMinimoGrafica / 2;
+            minimo -= ConstantesApp.RangoMinimoGrafica / 2;
         }
         else
         {
-            double margen = rango * 0.2;
+            double margen = rango * ConstantesApp.MargenGraficaFactor;
             maximo += margen;
             minimo -= margen;
         }
@@ -86,9 +86,8 @@ public sealed class GraficaHistorial : Control
         foreach (double valor in historial)
         {
             float x = (float)(ConstantesApp.CapacidadHistorial - cantidad + i) / (ConstantesApp.CapacidadHistorial - 1) * Width;
-            float y = Height - (float)((valor - minimo) / (maximo - minimo)) * (Height - 4) - 2;
-            puntosReutilizados[i] = new PointF(x, y);
-            puntosParaDibujar[i] = puntosReutilizados[i];
+            float y = Height - (float)((valor - minimo) / (maximo - minimo)) * (Height - ConstantesApp.RellenoVerticalGrafica) - ConstantesApp.BordeInferiorGrafica;
+            puntosParaDibujar[i] = new PointF(x, y);
             i++;
         }
 
