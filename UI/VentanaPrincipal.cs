@@ -35,6 +35,8 @@ public sealed class VentanaPrincipal : Form
     private int contadorTicks;
     private InfoBateria bateriaCacheada;
     private bool tieneBateriaCacheada;
+    private double ultimoUsoGpu = -1;
+    private bool tieneUltimoUsoGpu;
     private string ultimoTextoBandeja = "";
 
     public VentanaPrincipal(ILectorFrecuenciaCpu lectorCpu, ILectorBateria lectorBateria, ILectorUsoCpu lectorUsoCpu, ILectorGpu lectorGpu, ILectorRam lectorRam, GestorArranque gestorArranque)
@@ -166,7 +168,6 @@ public sealed class VentanaPrincipal : Form
         iconoBandeja.Icon = SystemIcons.Application;
         iconoBandeja.Visible = true;
 
-        MenuStrip menu = new MenuStrip();
         ToolStripMenuItem opcionArranque = new ToolStripMenuItem("Iniciar con Windows");
         opcionArranque.CheckOnClick = true;
         opcionArranque.Checked = gestorArranque.EstaActivado();
@@ -204,13 +205,26 @@ public sealed class VentanaPrincipal : Form
         // Si un sensor falla, la app no muere: muestra error y sigue viva.
         try
         {
+            contadorTicks++;
             double ghz = lectorCpu.LeerGHz();
             double usoCpu = lectorUsoCpu.LeerPorcentaje();
-            double usoGpu = lectorGpu.LeerPorcentaje();
+            // GPU: barrer 100-250 contadores cuesta ~300ms de CPU.
+            // Se lee 1 de cada 3 ticks (~3s) y se reutiliza el ultimo
+            // valor. El LectorGpu ademas cachea internamente por si acaso.
+            double usoGpu;
+            if (!tieneUltimoUsoGpu || (contadorTicks % 3) == 1)
+            {
+                usoGpu = lectorGpu.LeerPorcentaje();
+                ultimoUsoGpu = usoGpu;
+                tieneUltimoUsoGpu = true;
+            }
+            else
+            {
+                usoGpu = ultimoUsoGpu;
+            }
             InfoRam ram = lectorRam.Leer();
 
             // La batería cambia lento: se cachea ~30s en vez de leer cada tick.
-            contadorTicks++;
             if (!tieneBateriaCacheada || (contadorTicks % ConstantesApp.CadaCuantosTicksBateria == 0))
             {
                 bateriaCacheada = lectorBateria.Leer();
@@ -277,14 +291,18 @@ public sealed class VentanaPrincipal : Form
             }
 
             // Tooltip de bandeja con resumen (máx 63 caracteres en NotifyIcon).
-            // Solo se asigna si cambió: cada asignación es una llamada al shell.
+            // Solo se toca 1 de cada 3 ticks (~3s) y solo si cambió: cada
+            // asignación es una llamada al shell. Con F1 en vez de F2 cambia
+            // menos (antes cambiaba casi cada segundo por los decimales).
+            if ((contadorTicks % 3) == 1)
+            {
             try
             {
                 string textoRam = ram.TieneDatos
                     ? string.Format("RAM {0:F0}%", ram.Porcentaje)
                     : "RAM --";
                 string textoGpu = usoGpu < 0 ? "GPU --" : string.Format("GPU {0:F0}%", usoGpu);
-                string textoBandeja = string.Format("{0:F2} GHz | CPU {1:F0}% | {2} | {3}", ghz, usoCpu, textoGpu, textoRam);
+                string textoBandeja = string.Format("{0:F1} GHz | CPU {1:F0}% | {2} | {3}", ghz, usoCpu, textoGpu, textoRam);
                 if (textoBandeja.Length > 63)
                 {
                     textoBandeja = textoBandeja.Substring(0, 63);
@@ -298,6 +316,7 @@ public sealed class VentanaPrincipal : Form
             catch
             {
                 // El tooltip no es crítico: si falla, se ignora.
+            }
             }
         }
         catch (Exception)
